@@ -12,7 +12,6 @@ APP_TOKEN = "SjrMwZtXuiDQFWk0mbLcyLfDn9e"
 TABLE_B3 = "tbl1ymVjgIFS59eQ"  # 玩家档案
 TABLE_B4 = "tbldAoG04gMBCi3P"  # 服务器生态
 TABLE_B5 = "tblhrDWSXYtsahjt"  # 社交关系
-TABLE_A5 = "tblIZrPDKckN53VQ"  # 战斗数据
 
 def get_token():
     """获取tenant_access_token"""
@@ -20,11 +19,35 @@ def get_token():
     resp = requests.post(url, json={"app_id": APP_ID, "app_secret": APP_SECRET})
     return resp.json().get("tenant_access_token")
 
+def extract_text(value):
+    """从飞书字段值中提取纯文本"""
+    if value is None:
+        return "暂无"
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float)):
+        return value  # 数字保留原样
+    if isinstance(value, list):
+        # 富文本格式: [{'text': 'xxx', 'type': 'text'}, ...]
+        texts = []
+        for item in value:
+            if isinstance(item, dict):
+                t = item.get("text", "")
+                if t:
+                    texts.append(t)
+            elif isinstance(item, str):
+                texts.append(item)
+        return "、".join(texts) if texts else "暂无"
+    if isinstance(value, dict):
+        # 可能是人员字段等
+        return value.get("text", value.get("name", str(value)))
+    return str(value)
+
 def search_records(table_id, field_name, value, token):
     """搜索记录"""
     url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{APP_TOKEN}/tables/{table_id}/records/search"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    
+
     body = {
         "filter": {
             "conjunction": "and",
@@ -38,14 +61,14 @@ def search_records(table_id, field_name, value, token):
         },
         "page_size": 20
     }
-    
+
     resp = requests.post(url, headers=headers, json=body)
     data = resp.json()
-    
+
     if data.get("code") != 0:
         logger.error(f"搜索失败: {data}")
         return []
-    
+
     items = data.get("data", {}).get("items", [])
     return [item.get("fields", {}) for item in items]
 
@@ -53,61 +76,58 @@ def query_player(uid: str) -> str:
     """查询玩家完整档案"""
     try:
         token = get_token()
-        
+
         # 1. 查B3玩家档案
         b3_records = search_records(TABLE_B3, "玩家UID", uid, token)
-        
+
         if not b3_records:
             return f"❌ 未找到UID: {uid}\n请确认UID是否正确"
-        
+
         player = b3_records[0]
-        
-        # 提取基础信息
-        name = player.get("玩家名称", "未知")
-        server = player.get("所属服务器", "未知")
-        segment = player.get("区段名称", "未知")
-        power = player.get("玩家战力", "未知")
-        total_pay = player.get("总付费", "未知")
+
+        # 提取基础信息（全部用extract_text处理）
+        name = extract_text(player.get("玩家名称"))
+        server = extract_text(player.get("所属服务器"))
+        segment = extract_text(player.get("区段名称"))
+        power = player.get("玩家战力", 0)
+        total_pay = player.get("总付费", 0)
         pay_7d = player.get("最近7天付费", 0)
         pay_30d = player.get("最近30天付费", 0)
-        alliance = player.get("当前联盟名称", "无")
-        role = player.get("联盟职级", "未知")
+        alliance = extract_text(player.get("当前联盟名称"))
+        role = extract_text(player.get("联盟职级"))
         last_login = player.get("最后登录时间", "未知")
-        power_rank = player.get("区段内战力排名", "未知")
-        pay_rank = player.get("区段内付费排名", "未知")
-        
+        power_rank = extract_text(player.get("区段内战力排名"))
+        pay_rank = extract_text(player.get("区段内付费排名"))
+
         # AI分析字段
-        personality = player.get("性格标签", "暂无")
-        social_role = player.get("社交角色", "暂无")
-        friends = player.get("好友列表", "暂无")
-        conflicts = player.get("冲突对象", "暂无")
-        emotion = player.get("情感关系", "暂无")
-        pain_points = player.get("高频痛点", "暂无")
-        risk = player.get("流失风险", "暂无")
-        ai_summary = player.get("AI分析摘要", "暂无")
-        
+        personality = extract_text(player.get("性格标签"))
+        social_role = extract_text(player.get("社交角色"))
+        pain_points = extract_text(player.get("高频痛点"))
+        risk = extract_text(player.get("流失风险"))
+        ai_summary = extract_text(player.get("AI分析摘要"))
+
         # 2. 查B4服务器生态
         server_info = ""
-        if server != "未知":
+        if server and server != "暂无" and server != "未知":
             b4_records = search_records(TABLE_B4, "所属服务器", server, token)
             if b4_records:
                 s = b4_records[0]
-                president = s.get("当前总统名称", "未知")
-                president_alliance = s.get("总统所在联盟名称", "未知")
-                top1 = s.get("服内TOP1联盟名称", "未知")
-                top2 = s.get("服内TOP2联盟名称", "未知")
-                top3 = s.get("服内TOP3联盟名称", "未知")
-                pattern = s.get("权力格局", "未知")
-                
+                president = extract_text(s.get("当前总统名称"))
+                president_alliance = extract_text(s.get("总统所在联盟名称"))
+                top1 = extract_text(s.get("服内TOP1联盟名称"))
+                top2 = extract_text(s.get("服内TOP2联盟名称"))
+                top3 = extract_text(s.get("服内TOP3联盟名称"))
+                pattern = extract_text(s.get("权力格局"))
+
                 server_info = (
-                    f"\n━━━ 服务器生态（{server}服）━━━\n"
+                    f"\n\n━━━ 服务器生态（{server}服）━━━\n"
                     f"🏛️ 权力格局: {pattern}\n"
                     f"👑 总统: {president}（{president_alliance}）\n"
                     f"🥇 TOP1: {top1}\n"
                     f"🥈 TOP2: {top2}\n"
                     f"🥉 TOP3: {top3}"
                 )
-        
+
         # 3. 查B5社交关系
         social_info = ""
         b5_records = search_records(TABLE_B5, "玩家A_UID（聊天的人）", uid, token)
@@ -115,46 +135,67 @@ def query_player(uid: str) -> str:
             allies = []
             enemies = []
             for r in b5_records:
-                rel_type = r.get("关系类型", "")
-                b_name = r.get("玩家B名称", "未知")
-                desc = r.get("关系描述", "")
-                if "盟友" in str(rel_type) or "友" in str(rel_type):
-                    allies.append(f"{b_name}")
-                elif "敌" in str(rel_type) or "冲突" in str(rel_type):
-                    enemies.append(f"{b_name}")
-            
+                rel_type = extract_text(r.get("关系类型"))
+                b_name = extract_text(r.get("玩家B名称"))
+                if "盟友" in rel_type or "友" in rel_type:
+                    allies.append(b_name)
+                elif "敌" in rel_type or "冲突" in rel_type:
+                    enemies.append(b_name)
+
             if allies or enemies:
-                social_info = "\n━━━ 社交关系 ━━━"
+                social_info = "\n\n━━━ 社交关系 ━━━"
                 if allies:
                     social_info += f"\n🤝 盟友: {', '.join(allies[:5])}"
                 if enemies:
                     social_info += f"\n⚔️ 敌对: {', '.join(enemies[:5])}"
-        
-        # 4. 格式化战力/付费
+
+        # 4. 格式化战力
         if isinstance(power, (int, float)):
             if power >= 100000000:
                 power_str = f"{power/100000000:.1f}亿"
             elif power >= 10000:
                 power_str = f"{power/10000:.0f}万"
             else:
-                power_str = str(power)
+                power_str = str(int(power))
         else:
-            power_str = str(power)
-        
+            power_str = extract_text(power)
+
+        # 格式化付费
         if isinstance(total_pay, (int, float)):
             pay_str = f"${total_pay:,.0f}"
         else:
-            pay_str = str(total_pay)
-        
-        # 5. 拼装卡片
+            pay_str = extract_text(total_pay)
+
+        if isinstance(pay_7d, (int, float)):
+            pay_7d_str = f"${pay_7d:,.2f}"
+        else:
+            pay_7d_str = extract_text(pay_7d)
+
+        if isinstance(pay_30d, (int, float)):
+            pay_30d_str = f"${pay_30d:,.2f}"
+        else:
+            pay_30d_str = extract_text(pay_30d)
+
+        # 5. 格式化登录时间
+        if isinstance(last_login, (int, float)):
+            import datetime
+            try:
+                ts = last_login / 1000 if last_login > 9999999999 else last_login
+                login_str = datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
+            except:
+                login_str = str(last_login)
+        else:
+            login_str = extract_text(last_login)
+
+        # 6. 拼装卡片
         result = (
             f"━━━ 玩家档案 ━━━\n"
             f"👤 {name} | {server}服 | {segment}\n"
             f"⚔️ 战力: {power_str} | 区段排名: #{power_rank}\n"
             f"💰 总付费: {pay_str} | 区段排名: #{pay_rank}\n"
-            f"📅 7天付费: ${pay_7d} | 30天: ${pay_30d}\n"
+            f"📅 7天付费: {pay_7d_str} | 30天: {pay_30d_str}\n"
             f"🏰 联盟: {alliance} | 职级: {role}\n"
-            f"🕐 最后登录: {last_login}\n"
+            f"🕐 最后登录: {login_str}\n"
             f"\n━━━ AI画像 ━━━\n"
             f"🧠 性格: {personality}\n"
             f"👥 社交角色: {social_role}\n"
@@ -164,9 +205,9 @@ def query_player(uid: str) -> str:
             f"{social_info}"
             f"{server_info}"
         )
-        
+
         return result
-    
+
     except Exception as e:
-        logger.error(f"查询异常: {e}")
+        logger.error(f"查询异常: {e}", exc_info=True)
         return f"❌ 查询出错: {str(e)}"
