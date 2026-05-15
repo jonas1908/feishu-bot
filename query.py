@@ -118,6 +118,7 @@ def query_player(uid: str) -> str:
                 top2 = extract_text(s.get("服内TOP2联盟名称"))
                 top3 = extract_text(s.get("服内TOP3联盟名称"))
                 pattern = extract_text(s.get("权力格局"))
+                ecology = extract_text(s.get("生态分析"))
 
                 server_info = (
                     f"\n\n━━━ 服务器生态（{server}服）━━━\n"
@@ -126,6 +127,7 @@ def query_player(uid: str) -> str:
                     f"🥇 TOP1: {top1}\n"
                     f"🥈 TOP2: {top2}\n"
                     f"🥉 TOP3: {top3}"
+                    f"🌍 生态: {ecology}"
                 )
 
         # 3. 查B5社交关系
