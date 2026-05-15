@@ -126,7 +126,7 @@ def query_player(uid: str) -> str:
                     f"👑 总统: {president}（{president_alliance}）\n"
                     f"🥇 TOP1: {top1}\n"
                     f"🥈 TOP2: {top2}\n"
-                    f"🥉 TOP3: {top3}"
+                    f"🥉 TOP3: {top3}\n"
                     f"🌍 生态: {ecology}"
                 )
 
